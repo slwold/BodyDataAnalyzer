@@ -1,0 +1,61 @@
+# 忽略Python编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 忽略IDE和编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 忽略操作系统文件
+.DS_Store
+Thumbs.db
+
+# 忽略虚拟环境
+venv/
+.env/
+.venv/
+env/
+
+# 忽略测试结果
+pytest_cache/
+
+# 忽略日志文件
+*.log
+
+# 忽略临时文件
+*.tmp
+*.temp
+
+# 忽略数据文件（可选，根据需要保留或忽略）
+*.pkl
+*.json
+*.csv
+
+# 忽略构建文件
+build/
+dist/
+*.egg-info/
+
+# 忽略个人配置文件
+*.personal
+*.local
+
+# 忽略敏感信息
+*.key
+*.pem
+*.cer
+*.crt
+
+# 忽略缓存文件夹
+.cache/
+.parquet/
+
+# 忽略分析结果文件夹
+analysis_results/
+
+# 忽略测量数据文件夹（如果包含敏感数据）
+measured_cards/
