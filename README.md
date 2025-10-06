@@ -87,6 +87,30 @@ BodyDataAnalyzer/
 
 如果需要重新训练模型，可以使用内置的`train_and_save_model`函数，并提供自己的校准数据JSON文件。
 
+## 训练数据工具
+
+项目包含专门的训练数据处理工具，存放在`training_data`文件夹中。
+
+### full_shapeValues.py
+
+该工具用于从角色卡片中提取完整的33个shapeValue参数，并生成训练数据JSON文件。
+
+#### 功能说明
+- 从`measured_cards`目录读取角色卡片文件
+- 提取每张卡片的完整33个shapeValue参数
+- 从文件名中解析实际身高值（文件名格式应为"身高值.png"，如"148.3.png"）
+- 生成包含文件名、实际身高和完整shapeValue的JSON文件
+
+#### 使用方法
+
+1. 将已测量身高的角色卡片放入`measured_cards`目录，并确保文件名格式为"身高值.png"
+2. 运行以下命令：
+   ```bash
+   cd training_data
+   python full_shapeValues.py
+   ```
+3. 程序会生成`full_shapeValues.json`文件，包含所有提取的训练数据
+
 ## 审美分类标准
 
 遵循"正常审美向"自动分类方案，基于以下6个维度进行分类：
