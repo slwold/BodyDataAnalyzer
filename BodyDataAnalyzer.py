@@ -53,13 +53,13 @@ def train_and_save_model(data_path: str = None, save_path: str = "height_xgb.pkl
 # ------------------------------------------------------------------
 class BodyDataAnalyzer:
     HEIGHT_CATEGORIES = {
-        '微型幼幼': {'threshold': 130.0, 'description': '~129 cm 以下'},  # 第零档
-        '幼年': {'threshold': 145.0, 'description': '130 - 144 cm'},      # 第一档
-        '少年': {'threshold': 160.0, 'description': '145 - 159 cm'},      # 第二档
-        '青年': {'threshold': 175.0, 'description': '160 - 174 cm'},      # 第三档
-        '成年': {'threshold': 190.0, 'description': '175 - 189 cm'},      # 第四档
-        '高大魁梧': {'threshold': 210.0, 'description': '190 - 209 cm'},  # 第五档
-        '巨型伟岸': {'threshold': float('inf'), 'description': '210 cm ~'} # 第六档
+        '幼幼': {'threshold': 130.0, 'description': '<130cm'},  # 第零档
+        '玲珑': {'threshold': 155.0, 'description': '130-155cm'},      # 第一档
+        '少年': {'threshold': 160.0, 'description': '155-160cm'},      # 第二档
+        '青年': {'threshold': 175.0, 'description': '160-175cm'},      # 第三档
+        '成年': {'threshold': 185.0, 'description': '175-185cm'},      # 第四档
+        '魁梧': {'threshold': 210.0, 'description': '185-210cm'},  # 第五档
+        '伟岸': {'threshold': float('inf'), 'description': '>210cm'} # 第六档
     }
 
     def __init__(self, model_path: str = "height_xgb.pkl"):
