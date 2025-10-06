@@ -85,7 +85,7 @@ JSON结果格式包含以下字段：
 - `file_name`：卡片文件名
 - `success`：分析是否成功
 - `height_cm`：预测身高（厘米）
-- `height_category`：身高分类（微型幼幼、幼年、少年、青年、成年、高大魁梧、巨型伟岸）
+- `height_category`：身高分类
 - `character_name`：角色名称
 - `error`：如果分析失败，包含错误信息
 - `move_status`或`copy_status`：文件移动或复制状态
