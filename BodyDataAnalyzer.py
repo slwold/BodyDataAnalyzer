@@ -6,8 +6,10 @@ BodyDataAnalyzer + XGBoost 身高预测
 """
 import os
 import json
+import shutil
+import time
 import numpy as np
-from typing import List, Dict, Union, Tuple
+from typing import List, Dict, Union
 from pathlib import Path
 
 # ====== 第三方库 ======
@@ -50,25 +52,15 @@ def train_and_save_model(data_path: str = None, save_path: str = "height_xgb.pkl
 #  2. 分析器主体
 # ------------------------------------------------------------------
 class BodyDataAnalyzer:
-    # 基础身高分类
     HEIGHT_CATEGORIES = {
-        '萝莉': {'threshold': 150.0, 'description': '约 < 150 cm'},
-        '普妹': {'threshold': 170.0, 'description': '150 ~ 170 cm'},
-        '御姐': {'threshold': float('inf'), 'description': '约 > 170 cm'}
+        '微型幼幼': {'threshold': 130.0, 'description': '~129 cm 以下'},  # 第零档
+        '幼年': {'threshold': 145.0, 'description': '130 - 144 cm'},      # 第一档
+        '少年': {'threshold': 160.0, 'description': '145 - 159 cm'},      # 第二档
+        '青年': {'threshold': 175.0, 'description': '160 - 174 cm'},      # 第三档
+        '成年': {'threshold': 190.0, 'description': '175 - 189 cm'},      # 第四档
+        '高大魁梧': {'threshold': 210.0, 'description': '190 - 209 cm'},  # 第五档
+        '巨型伟岸': {'threshold': float('inf'), 'description': '210 cm ~'} # 第六档
     }
-    
-    # 详细审美分类（基于KKManager-1.5的"正常审美向"自动分类方案）
-    AESTHETIC_CATEGORIES = {
-        'bodyHeight': {'low': 0.92, 'high': 1.08, 'small': '萝莉', 'mid': '普妹', 'large': '御姐'},
-        'bustSize': {'low': 0.65, 'high': 0.80, 'small': '微乳', 'mid': '适中', 'large': '丰满'},
-        'waistSize': {'low': 0.50, 'high': 0.60, 'small': '纤细', 'mid': '标准', 'large': '肉感'},
-        'hipSize': {'low': 0.70, 'high': 0.85, 'small': '小臀', 'mid': '匀称', 'large': '翘臀'},
-        'bustSoftness': {'low': 0.30, 'high': 0.70, 'small': '硬挺', 'mid': '自然', 'large': '柔软'},
-        'muscle': {'low': 0.20, 'high': 0.50, 'small': '纤弱', 'mid': '健康', 'large': '健美'}
-    }
-    
-    # 输出标签顺序
-    TAG_ORDER = ['bodyHeight', 'bustSize', 'hipSize', 'muscle', 'bustSoftness']
 
     def __init__(self, model_path: str = "height_xgb.pkl"):
         if not os.path.exists(model_path):
@@ -90,135 +82,24 @@ class BodyDataAnalyzer:
     def extract_height(self, chara_data: Union[AiSyoujyoCharaData, KoikatuCharaData]) -> float:
         sv = np.array(chara_data.Custom["body"]["shapeValueBody"]).reshape(1, -1)
         return float(self.model.predict(sv)[0])
-    
-    # ---------- 获取审美参数 ----------
-    def get_aesthetic_parameters(self, chara_data: Union[AiSyoujyoCharaData, KoikatuCharaData]) -> Dict[str, float]:
-        """
-        获取角色的审美相关参数
-        """
-        params = {}
-        try:
-            # 尝试从Parameter模块获取审美参数
-            if hasattr(chara_data, 'Parameter'):
-                param = chara_data.Parameter
-                
-                # 尝试不同的访问策略，确保能够获取到参数
-                if hasattr(param, 'data') and isinstance(param.data, dict):
-                    # 策略1: 直接访问data字典
-                    for param_name in self.AESTHETIC_CATEGORIES.keys():
-                        try:
-                            if param_name in param.data:
-                                params[param_name] = float(param.data[param_name])
-                        except:
-                            pass
-                
-                # 策略2: 使用__getitem__访问
-                if hasattr(param, '__getitem__'):
-                    for param_name in self.AESTHETIC_CATEGORIES.keys():
-                        if param_name not in params:
-                            try:
-                                value = param[param_name]
-                                params[param_name] = float(value)
-                            except:
-                                pass
-                
-                # 策略3: 使用getattr访问属性
-                for param_name in self.AESTHETIC_CATEGORIES.keys():
-                    if param_name not in params:
-                        try:
-                            value = getattr(param, param_name)
-                            params[param_name] = float(value)
-                        except:
-                            pass
-                
-                # 策略4: 尝试访问Parameter的data属性中的其他可能路径
-                if hasattr(param, 'data'):
-                    try:
-                        # 检查是否有嵌套的数据结构
-                        if isinstance(param.data, dict):
-                            # 尝试访问data中的不同层级
-                            for key in param.data.keys():
-                                if isinstance(param.data[key], dict):
-                                    for subkey in param.data[key].keys():
-                                        if subkey in self.AESTHETIC_CATEGORIES and subkey not in params:
-                                            try:
-                                                params[subkey] = float(param.data[key][subkey])
-                                            except:
-                                                pass
-                    except:
-                        pass
-        except Exception as e:
-            print(f"获取审美参数时出错: {str(e)}")
-        
-        # 如果仍然没有获取到参数，尝试使用默认值（仅用于测试）
-        if not params:
-            # 为了演示效果，我们可以为某些参数设置默认值
-            params = {
-                'bustSize': 0.75,  # 适中
-                'waistSize': 0.55,  # 标准
-                'hipSize': 0.80,  # 匀称
-                'bustSoftness': 0.50,  # 自然
-                'muscle': 0.35  # 健康
-            }
-            
-        return params
 
-    # ---------- 基础身高分类 ----------
+    # ---------- 分类 ----------
     def classify_by_height(self, height_cm: float) -> str:
-        if height_cm < self.HEIGHT_CATEGORIES['萝莉']['threshold']:
-            return '萝莉'
-        elif height_cm < self.HEIGHT_CATEGORIES['普妹']['threshold']:
-            return '普妹'
-        return '御姐'
-    
-    # ---------- 通用分类函数 ----------
-    def classify_parameter(self, value: float, param_name: str) -> str:
-        """
-        根据参数名和值，返回对应的分类标签
-        """
-        if param_name not in self.AESTHETIC_CATEGORIES:
-            return '未知'
-        
-        cat = self.AESTHETIC_CATEGORIES[param_name]
-        if value < cat['low']:
-            return cat['small']
-        elif value <= cat['high']:
-            return cat['mid']
+        # 星穹铁道角色体型七档分类体系
+        if height_cm < self.HEIGHT_CATEGORIES['微型幼幼']['threshold']:
+            return '微型幼幼'
+        elif height_cm < self.HEIGHT_CATEGORIES['幼年']['threshold']:
+            return '幼年'
+        elif height_cm < self.HEIGHT_CATEGORIES['少年']['threshold']:
+            return '少年'
+        elif height_cm < self.HEIGHT_CATEGORIES['青年']['threshold']:
+            return '青年'
+        elif height_cm < self.HEIGHT_CATEGORIES['成年']['threshold']:
+            return '成年'
+        elif height_cm < self.HEIGHT_CATEGORIES['高大魁梧']['threshold']:
+            return '高大魁梧'
         else:
-            return cat['large']
-    
-    # ---------- 获取完整分类 ----------
-    def get_complete_classification(self, chara_data: Union[AiSyoujyoCharaData, KoikatuCharaData], height_cm: float = None) -> Tuple[Dict[str, str], str]:
-        """
-        获取完整的分类信息和组合标签
-        """
-        # 获取审美参数
-        params = self.get_aesthetic_parameters(chara_data)
-        
-        # 计算身高（如果未提供）
-        if height_cm is None:
-            height_cm = self.extract_height(chara_data)
-        
-        # 进行各项分类
-        classifications = {}
-        
-        # 使用预测的实际身高覆盖bodyHeight分类
-        height_category = self.classify_by_height(height_cm)
-        classifications['bodyHeight'] = height_category
-        
-        # 对其他参数进行分类
-        for param_name in self.AESTHETIC_CATEGORIES.keys():
-            if param_name != 'bodyHeight' and param_name in params:
-                classifications[param_name] = self.classify_parameter(params[param_name], param_name)
-        
-        # 生成组合标签
-        tag_parts = []
-        for param_name in self.TAG_ORDER:
-            if param_name in classifications:
-                tag_parts.append(classifications[param_name])
-        
-        combined_tag = '_'.join(tag_parts)
-        return classifications, combined_tag
+            return '巨型伟岸'
 
     # ---------- 单卡分析 ----------
     def analyze_character_card(self, file_path: str) -> Dict:
@@ -281,12 +162,6 @@ class BodyDataAnalyzer:
             height_cm = self.extract_height(chara)
             result['height_cm'] = round(height_cm, 1)
             result['height_category'] = self.classify_by_height(height_cm)
-            
-            # 获取完整分类信息
-            classifications, combined_tag = self.get_complete_classification(chara, height_cm)
-            result['aesthetic_classifications'] = classifications
-            result['combined_tag'] = combined_tag
-            
             result['success'] = True
         except Exception as e:
             result['error'] = f"{type(e).__name__}: {str(e)}"
@@ -309,27 +184,263 @@ class BodyDataAnalyzer:
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
 
+    # ---------- 自动分类到文件夹 ----------
+    def categorize_files_by_height(self, results: List[Dict], output_dir: str, move_files: bool = True, batch_size: int = 1000) -> List[Dict]:
+        """
+        根据身高分类将角色卡文件移动或复制到对应文件夹
+        
+        参数:
+            results: 分析结果列表
+            output_dir: 输出目录
+            move_files: 是否移动文件（True）而不是复制（False）
+            batch_size: 每批处理的文件数量，用于处理大量文件
+        
+        返回:
+            包含移动/复制状态的结果列表
+        """
+        # 为每个分类创建文件夹
+        for category in self.HEIGHT_CATEGORIES.keys():
+            category_dir = os.path.join(output_dir, category)
+            os.makedirs(category_dir, exist_ok=True)
+        
+        # 创建错误文件夹
+        error_dir = os.path.join(output_dir, "错误")
+        os.makedirs(error_dir, exist_ok=True)
+        
+        # 准备恢复信息
+        recovery_info = {
+            'timestamp': os.path.getmtime(output_dir) if os.path.exists(output_dir) else time.time(),
+            'files': []
+        }
+        
+        # 处理大量文件的批处理
+        total_files = len(results)
+        processed = 0
+        
+        # 按批次处理文件
+        for i in range(0, total_files, batch_size):
+            batch = results[i:i+batch_size]
+            
+            for result in batch:
+                try:
+                    if result['success']:
+                        src_path = result['file_path']
+                        dest_dir = os.path.join(output_dir, result['height_category'])
+                        dest_path = os.path.join(dest_dir, result['file_name'])
+                        
+                        # 如果文件已存在，添加编号避免覆盖
+                        counter = 1
+                        base_name, ext = os.path.splitext(result['file_name'])
+                        while os.path.exists(dest_path):
+                            dest_path = os.path.join(dest_dir, f"{base_name}_{counter}{ext}")
+                            counter += 1
+                        
+                        if move_files:
+                            # 保存原始路径用于恢复
+                            recovery_info['files'].append({
+                                'original_path': src_path,
+                                'current_path': dest_path
+                            })
+                            shutil.move(src_path, dest_path)
+                            result['move_status'] = f"已移动到 {result['height_category']} 文件夹"
+                        else:
+                            shutil.copy2(src_path, dest_path)
+                            result['copy_status'] = f"已复制到 {result['height_category']} 文件夹"
+                        result['dest_path'] = dest_path
+                    else:
+                        src_path = result['file_path']
+                        dest_dir = error_dir
+                        dest_path = os.path.join(dest_dir, result['file_name'])
+                        
+                        # 如果文件已存在，添加编号避免覆盖
+                        counter = 1
+                        base_name, ext = os.path.splitext(result['file_name'])
+                        while os.path.exists(dest_path):
+                            dest_path = os.path.join(dest_dir, f"{base_name}_{counter}{ext}")
+                            counter += 1
+                        
+                        if move_files:
+                            # 保存原始路径用于恢复
+                            recovery_info['files'].append({
+                                'original_path': src_path,
+                                'current_path': dest_path
+                            })
+                            shutil.move(src_path, dest_path)
+                            result['move_status'] = f"已移动到错误文件夹"
+                        else:
+                            shutil.copy2(src_path, dest_path)
+                            result['copy_status'] = f"已复制到错误文件夹"
+                        result['dest_path'] = dest_path
+                except Exception as e:
+                    if move_files:
+                        result['move_status'] = f"移动失败: {type(e).__name__}: {str(e)}"
+                    else:
+                        result['copy_status'] = f"复制失败: {type(e).__name__}: {str(e)}"
+                    result['dest_path'] = None
+                
+                # 更新进度
+                processed += 1
+                if processed % 100 == 0 or processed == total_files:
+                    print(f"处理进度: {processed}/{total_files}")
+        
+        # 保存恢复信息，只有在移动文件模式下才保存
+        if move_files:
+            recovery_file = os.path.join(output_dir, 'recovery_info.json')
+            with open(recovery_file, 'w', encoding='utf-8') as f:
+                json.dump(recovery_info, f, ensure_ascii=False, indent=2)
+            print(f"恢复信息已保存至: {recovery_file}")
+            print("提示：如需恢复到分类前状态，可使用 python BodyDataAnalyzer.py restore <output_dir>")
+        
+        return results
+        
+    # ---------- 恢复文件功能（后悔药）----------
+    def restore_files(self, output_dir: str) -> Dict:
+        """
+        恢复被分类的文件到原始位置（后悔药功能）
+        
+        参数:
+            output_dir: 分类输出目录
+        
+        返回:
+            恢复操作的统计信息
+        """
+        recovery_file = os.path.join(output_dir, 'recovery_info.json')
+        
+        if not os.path.exists(recovery_file):
+            raise FileNotFoundError(f"找不到恢复信息文件: {recovery_file}")
+        
+        # 读取恢复信息
+        with open(recovery_file, 'r', encoding='utf-8') as f:
+            recovery_info = json.load(f)
+        
+        # 恢复文件
+        success_count = 0
+        fail_count = 0
+        fail_files = []
+        
+        total_files = len(recovery_info['files'])
+        print(f"开始恢复 {total_files} 个文件...")
+        
+        for i, file_info in enumerate(recovery_info['files']):
+            try:
+                original_path = file_info['original_path']
+                current_path = file_info['current_path']
+                
+                # 确保目标目录存在
+                original_dir = os.path.dirname(original_path)
+                os.makedirs(original_dir, exist_ok=True)
+                
+                # 如果原始路径已存在文件，添加编号避免覆盖
+                if os.path.exists(original_path):
+                    base_name, ext = os.path.splitext(original_path)
+                    counter = 1
+                    while os.path.exists(original_path):
+                        original_path = f"{base_name}_{counter}{ext}"
+                        counter += 1
+                    
+                # 移动文件回原始位置
+                if os.path.exists(current_path):
+                    shutil.move(current_path, original_path)
+                    success_count += 1
+                else:
+                    fail_count += 1
+                    fail_files.append(f"{current_path} (文件不存在)")
+                
+                # 更新进度
+                if (i + 1) % 100 == 0 or (i + 1) == total_files:
+                    print(f"恢复进度: {i + 1}/{total_files}")
+            except Exception as e:
+                fail_count += 1
+                fail_files.append(f"{file_info['current_path']} -> {str(e)}")
+        
+        # 清理空文件夹
+        for category in self.HEIGHT_CATEGORIES.keys():
+            category_dir = os.path.join(output_dir, category)
+            if os.path.exists(category_dir) and not os.listdir(category_dir):
+                os.rmdir(category_dir)
+        
+        # 清理错误文件夹
+        error_dir = os.path.join(output_dir, "错误")
+        if os.path.exists(error_dir) and not os.listdir(error_dir):
+            os.rmdir(error_dir)
+        
+        # 删除恢复信息文件
+        if os.path.exists(recovery_file):
+            os.remove(recovery_file)
+        
+        stats = {
+            'total': total_files,
+            'success': success_count,
+            'fail': fail_count,
+            'fail_files': fail_files
+        }
+        
+        return stats
+
 
 # ------------------------------------------------------------------
 #  3. 命令行入口
 # ------------------------------------------------------------------
+import time
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("用法: python BodyDataAnalyzer.py <角色卡目录路径>")
+        print("用法:")
+        print("  python BodyDataAnalyzer.py <角色卡目录路径>  # 分析并分类角色卡")
+        print("  python BodyDataAnalyzer.py restore <output_dir>  # 恢复分类的文件到原始位置")
         sys.exit(1)
 
+    # 处理恢复命令
+    if len(sys.argv) == 3 and sys.argv[1].lower() == "restore":
+        output_dir = sys.argv[2]
+        analyzer = BodyDataAnalyzer()
+        try:
+            print(f"正在准备恢复文件...")
+            stats = analyzer.restore_files(output_dir)
+            
+            print(f"\n恢复完成:")
+            print(f"总文件数: {stats['total']}")
+            print(f"成功恢复: {stats['success']}")
+            print(f"恢复失败: {stats['fail']}")
+            
+            if stats['fail'] > 0:
+                print("\n失败的文件:")
+                for fail_file in stats['fail_files']:
+                    print(f"- {fail_file}")
+                
+            print(f"\n文件已恢复到原始位置")
+        except Exception as e:
+            print(f"恢复失败: {str(e)}")
+            sys.exit(1)
+        sys.exit(0)
+
+    # 正常的分析和分类功能
     input_dir = sys.argv[1]
     analyzer = BodyDataAnalyzer()          # 默认加载 height_xgb.pkl
     results = analyzer.batch_analyze(input_dir)
 
-    # 打印结果
     for r in results:
         if r['success']:
-            print(f"{r['file_name']} -> {r['height_cm']} cm ({r['height_category']}) [{r.get('combined_tag', '')}]")
+            print(f"{r['file_name']} -> {r['height_cm']} cm ({r['height_category']})")
         else:
             print(f"{r['file_name']} -> 错误: {r['error']}")
 
+    # 自动分类到文件夹 - 默认使用移动文件模式
+    output_dir = os.path.join(input_dir, 'categorized')
+    print(f"\n开始自动分类文件到: {output_dir}")
+    print(f"文件处理模式: {'移动' if True else '复制'}")
+    categorized_results = analyzer.categorize_files_by_height(results, output_dir, move_files=True)
+    
+    # 保存分析结果
     output_path = os.path.join(input_dir, 'analysis_results.json')
-    analyzer.save_analysis_results(results, output_path)
-    print(f"\n详细结果已保存至: {output_path}")
+    analyzer.save_analysis_results(categorized_results, output_path)
+    
+    # 统计信息
+    success_count = sum(1 for r in categorized_results if r['success'])
+    error_count = len(categorized_results) - success_count
+    
+    print(f"\n分析完成: 成功 {success_count} 张, 失败 {error_count} 张")
+    print(f"详细结果已保存至: {output_path}")
+    print(f"文件已自动分类到: {output_dir}")
+    print(f"提示: 如需恢复到分类前状态，可使用 python BodyDataAnalyzer.py restore {output_dir}")
