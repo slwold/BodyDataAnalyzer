@@ -86,20 +86,20 @@ class BodyDataAnalyzer:
     # ---------- 分类 ----------
     def classify_by_height(self, height_cm: float) -> str:
         # 星穹铁道角色体型七档分类体系
-        if height_cm < self.HEIGHT_CATEGORIES['微型幼幼']['threshold']:
-            return '微型幼幼'
-        elif height_cm < self.HEIGHT_CATEGORIES['幼年']['threshold']:
-            return '幼年'
+        if height_cm < self.HEIGHT_CATEGORIES['幼幼']['threshold']:
+            return '幼幼'
+        elif height_cm < self.HEIGHT_CATEGORIES['玲珑']['threshold']:
+            return '玲珑'
         elif height_cm < self.HEIGHT_CATEGORIES['少年']['threshold']:
             return '少年'
         elif height_cm < self.HEIGHT_CATEGORIES['青年']['threshold']:
             return '青年'
         elif height_cm < self.HEIGHT_CATEGORIES['成年']['threshold']:
             return '成年'
-        elif height_cm < self.HEIGHT_CATEGORIES['高大魁梧']['threshold']:
-            return '高大魁梧'
+        elif height_cm < self.HEIGHT_CATEGORIES['魁梧']['threshold']:
+            return '魁梧'
         else:
-            return '巨型伟岸'
+            return '伟岸'
 
     # ---------- 单卡分析 ----------
     def analyze_character_card(self, file_path: str) -> Dict:
